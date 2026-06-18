@@ -70,3 +70,13 @@ src/
 ## 📝 配置文件位置
 
 `%APPDATA%\md-reader\config.toml`（Windows）。删除该文件即可恢复全部默认设置。
+
+## 📄 License
+
+本项目基于 [MIT License](LICENSE) 开源，可自由使用、修改和分发，请保留原始版权声明。
+
+## 🙏 致谢
+
+- GUI 框架：[egui](https://github.com/emilk/egui)
+- Markdown 解析：[pulldown-cmark](https://github.com/pulldown-cmark/pulldown-cmark)
+- 中文编码识别：[encoding_rs](https://github.com/hsivonen/encoding_rs)
