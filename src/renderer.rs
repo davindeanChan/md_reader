@@ -8,23 +8,32 @@ const MAX_CONTENT_WIDTH: f32 = 860.0;
 ///
 /// - `zoom`：整体缩放倍率（1.0 = 默认），通过放大所有文字样式字号实现。
 /// - 内容宽度受 [`MAX_CONTENT_WIDTH`] 限制并居中。
-pub fn render_markdown(
-    ui: &mut egui::Ui,
-    cache: &mut CommonMarkCache,
-    text: &str,
-    zoom: f32,
-) {
+/// - 缩放通过 `scope_builder` 隔离为子 UI 样式，不污染父级样式，避免样式泄露导致
+///   相邻面板（如 TOC 侧边栏）的分隔线/边框渲染异常。
+pub fn render_markdown(ui: &mut egui::Ui, cache: &mut CommonMarkCache, text: &str, zoom: f32) {
     let scale = zoom.clamp(0.5, 3.0);
 
-    // 应用缩放：把所有 text_style 的字号整体放大
     if (scale - 1.0).abs() > 1e-3 {
-        let mut sizes = ui.style().text_styles.clone();
-        for (_id, style) in sizes.iter_mut() {
+        // 创建一份放大的 text_styles，通过 scope_builder 隔离到子 UI，
+        // 确保父 UI 的 style 不被修改，避免影响同层其他面板的样式。
+        let mut zoomed_sizes = ui.style().text_styles.clone();
+        for (_id, style) in zoomed_sizes.iter_mut() {
             style.size *= scale;
         }
-        ui.style_mut().text_styles = sizes;
-    }
 
+        let mut zoomed_style: egui::Style = (**ui.style()).clone();
+        zoomed_style.text_styles = zoomed_sizes;
+
+        ui.scope_builder(egui::UiBuilder::new().style(zoomed_style), |ui| {
+            render_content(ui, cache, text, scale);
+        });
+    } else {
+        render_content(ui, cache, text, scale);
+    }
+}
+
+/// 实际的滚动 + 居中渲染逻辑
+fn render_content(ui: &mut egui::Ui, cache: &mut CommonMarkCache, text: &str, scale: f32) {
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {

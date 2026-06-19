@@ -50,7 +50,12 @@ fn strip_utf8_bom(bytes: &[u8]) -> &[u8] {
 pub fn is_markdown_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| matches!(ext.to_lowercase().as_str(), "md" | "markdown" | "mdown" | "mkd"))
+        .map(|ext| {
+            matches!(
+                ext.to_lowercase().as_str(),
+                "md" | "markdown" | "mdown" | "mkd"
+            )
+        })
         .unwrap_or(false)
 }
 

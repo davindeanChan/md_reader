@@ -3,8 +3,8 @@
 //! 配置文件位于 `<用户配置目录>/md-reader/config.toml`，
 //! Windows 下通常是 `%APPDATA%/md-reader/config.toml`。
 
-use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 /// 持久化的应用偏好
 #[derive(Debug, Clone, Serialize, Deserialize)]

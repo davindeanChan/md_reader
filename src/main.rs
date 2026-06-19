@@ -8,8 +8,8 @@ mod file_ops;
 mod renderer;
 mod toc;
 
-use std::path::PathBuf;
 use eframe::NativeOptions;
+use std::path::PathBuf;
 
 /// 嵌入图标 PNG 数据到二进制文件中
 const ICON_PNG: &[u8] = include_bytes!("../assets/icon_256.png");
@@ -55,10 +55,10 @@ fn setup_chinese_font(ctx: &eframe::egui::Context) {
 
     // 尝试加载系统中文字体
     let font_paths = [
-        "C:\\Windows\\Fonts\\msyh.ttc",    // 微软雅黑
-        "C:\\Windows\\Fonts\\msyhbd.ttc",   // 微软雅黑粗体
-        "C:\\Windows\\Fonts\\simhei.ttf",   // 黑体
-        "C:\\Windows\\Fonts\\simsun.ttc",   // 宋体
+        "C:\\Windows\\Fonts\\msyh.ttc",   // 微软雅黑
+        "C:\\Windows\\Fonts\\msyhbd.ttc", // 微软雅黑粗体
+        "C:\\Windows\\Fonts\\simhei.ttf", // 黑体
+        "C:\\Windows\\Fonts\\simsun.ttc", // 宋体
     ];
 
     let mut loaded = false;
@@ -98,5 +98,9 @@ fn load_icon() -> Option<eframe::egui::IconData> {
     let img = image::load_from_memory(ICON_PNG).ok()?;
     let (w, h) = img.dimensions();
     let rgba = img.to_rgba8().into_raw();
-    Some(eframe::egui::IconData { rgba, width: w, height: h })
+    Some(eframe::egui::IconData {
+        rgba,
+        width: w,
+        height: h,
+    })
 }

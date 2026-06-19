@@ -398,9 +398,13 @@ impl eframe::App for MdReaderApp {
                                     ui.horizontal(|ui| {
                                         ui.add_space(indent);
                                         let label = format!("{} {}", marker(h.level), h.text);
-                                        // 点击标题暂不支持精确滚动定位，
-                                        // 这里仅做高亮反馈（egui_commonmark 未暴露锚点 id）
-                                        if ui.selectable_label(false, &label).clicked() {
+                                        // 使用明确宽度 + 自动换行的 Selectable 按钮，
+                                        // 避免长标题以其未换行宽度撑开 TOC panel frame，
+                                        // 导致 central panel 起始位置错位而出现黑块。
+                                        let max_w = ui.available_width().max(0.0);
+                                        let btn =
+                                            egui::Button::selectable(false, label.as_str()).wrap();
+                                        if ui.add_sized([max_w, 0.0], btn).clicked() {
                                             ui.ctx().request_repaint();
                                         }
                                     });
