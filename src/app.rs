@@ -52,6 +52,10 @@ pub struct MdReaderApp {
     /// 查找功能
     find_open: bool,
     find_query: String,
+
+    /// 大纲跳转目标：`Some(i)` 表示下一次渲染时把第 `i` 个标题所在段落
+    /// 滚动到视口顶部，渲染消费后由 renderer 通知清除。
+    scroll_target: Option<usize>,
 }
 
 impl MdReaderApp {
@@ -79,6 +83,7 @@ impl MdReaderApp {
             last_check: Instant::now(),
             find_open: false,
             find_query: String::new(),
+            scroll_target: None,
         };
 
         // 启动时恢复：命令行参数优先，否则尝试恢复上次文件
@@ -380,20 +385,24 @@ impl eframe::App for MdReaderApp {
 
         // 左侧 TOC 大纲
         if self.show_toc {
-            egui::Panel::left("toc")
+            // 先克隆标题，避免 panel 闭包同时借用 self.headings（读）与
+            // self.scroll_target（写）产生借用冲突。
+            let headings = self.headings.clone();
+            let clicked = egui::Panel::left("toc")
                 .resizable(true)
                 .default_size(220.0)
                 .size_range(120.0..=400.0)
-                .show_inside(ui, |ui| {
+                .show_inside(ui, |ui| -> Option<usize> {
+                    let mut clicked = None;
                     ui.heading("大纲");
                     ui.separator();
                     egui::ScrollArea::vertical()
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
-                            if self.headings.is_empty() {
+                            if headings.is_empty() {
                                 ui.label("(无标题)");
                             } else {
-                                for h in &self.headings {
+                                for (idx, h) in headings.iter().enumerate() {
                                     let indent = (h.level.saturating_sub(1) as f32) * 14.0;
                                     ui.horizontal(|ui| {
                                         ui.add_space(indent);
@@ -405,19 +414,36 @@ impl eframe::App for MdReaderApp {
                                         let btn =
                                             egui::Button::selectable(false, label.as_str()).wrap();
                                         if ui.add_sized([max_w, 0.0], btn).clicked() {
-                                            ui.ctx().request_repaint();
+                                            clicked = Some(idx);
                                         }
                                     });
                                 }
                             }
                         });
-                });
+                    clicked
+                })
+                .inner;
+            if let Some(idx) = clicked {
+                self.scroll_target = Some(idx);
+            }
         }
 
         // 中央 Markdown 渲染区
-        egui::CentralPanel::default().show_inside(ui, |ui| {
-            renderer::render_markdown(ui, &mut self.cache, &self.markdown_text, self.zoom);
-        });
+        let scroll_target = self.scroll_target;
+        let consumed = egui::CentralPanel::default()
+            .show_inside(ui, |ui| {
+                renderer::render_markdown_with_toc(
+                    ui,
+                    &mut self.cache,
+                    &self.markdown_text,
+                    self.zoom,
+                    scroll_target,
+                )
+            })
+            .inner;
+        if consumed {
+            self.scroll_target = None;
+        }
     }
 }
 
