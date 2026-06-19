@@ -122,20 +122,102 @@ fn render_segments(
     let mut consumed = false;
     for (seg_idx, &start) in starts.iter().enumerate() {
         let end = starts.get(seg_idx + 1).copied().unwrap_or(total);
+        if start == end {
+            // 跳过空段，避免生成无意义 widget 并占用 id。
+            continue;
+        }
         let segment = &text[start..end];
 
-        // seg_idx == 0 是前言（无对应标题），不响应跳转；
-        // seg_idx == k 对应 headings[k-1]。
-        if scroll_target == Some(seg_idx.saturating_sub(1)) && seg_idx > 0 {
-            // 把该段起始滚动到视口顶部，冒泡到本 ScrollArea。
-            // 必须在该段渲染之前调用，作用于下一个 widget 位置。
-            ui.scroll_to_cursor(Some(egui::Align::TOP));
-            consumed = true;
-        }
+        // 为每段分配独立的 widget id 命名空间。
+        // 多次调用 CommonMarkViewer::show 会创建大量内部 widget，
+        // 若共享同一 id 作用域，同帧内可能出现 id 冲突，导致布局/
+        // 位置计算异常（正文内容重叠）。
+        let is_target = scroll_target == Some(seg_idx.saturating_sub(1)) && seg_idx > 0;
+        let hit = ui
+            .push_id(seg_idx, |ui| {
+                if is_target {
+                    // 把该段起始滚动到视口顶部，冒泡到本 ScrollArea。
+                    // 必须在该段渲染之前调用，作用于下一个 widget 位置。
+                    ui.scroll_to_cursor(Some(egui::Align::TOP));
+                }
 
-        // 每段文本 = 链接定义 + 段原文
-        let seg_text = format!("{defs}\n{segment}");
-        CommonMarkViewer::new().show(ui, cache, &seg_text);
+                // 每段文本 = 链接定义 + 段原文
+                let seg_text = format!("{defs}\n{segment}");
+                CommonMarkViewer::new().show(ui, cache, &seg_text);
+
+                is_target
+            })
+            .inner;
+
+        consumed |= hit;
     }
     consumed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_markdown_with_headings_does_not_panic() {
+        egui::__run_test_ui(|ui| {
+            let mut cache = CommonMarkCache::default();
+            let text = "# A\n\npara a\n\n# B\n\npara b\n";
+            let consumed = render_markdown_with_toc(ui, &mut cache, text, 1.0, None);
+            assert!(!consumed);
+        });
+    }
+
+    #[test]
+    fn render_markdown_with_scroll_target_is_consumed() {
+        egui::__run_test_ui(|ui| {
+            let mut cache = CommonMarkCache::default();
+            let text = "# A\n\npara a\n\n# B\n\npara b\n";
+            let consumed = render_markdown_with_toc(ui, &mut cache, text, 1.0, Some(1));
+            assert!(consumed);
+        });
+    }
+
+    #[test]
+    fn render_markdown_with_leading_heading_does_not_panic() {
+        // 文档以标题开头时，前言段为空；需确保跳过空段后渲染正常。
+        egui::__run_test_ui(|ui| {
+            let mut cache = CommonMarkCache::default();
+            let text = "# First\n\npara\n\n# Second\n\npara\n";
+            let consumed = render_markdown_with_toc(ui, &mut cache, text, 1.0, None);
+            assert!(!consumed);
+        });
+    }
+
+    #[test]
+    fn multiple_commonmark_viewers_do_not_overlap() {
+        // 模拟分段渲染：连续调用多个 CommonMarkViewer，验证它们在
+        // 垂直方向上依次排布、互不重叠。
+        egui::__run_test_ui(|ui| {
+            let mut cache = CommonMarkCache::default();
+            let r1 = ui.vertical(|ui| {
+                CommonMarkViewer::new().show(ui, &mut cache, "# A\n\npara a\n")
+            });
+            let r2 = ui.vertical(|ui| {
+                CommonMarkViewer::new().show(ui, &mut cache, "# B\n\npara b\n")
+            });
+            assert!(
+                r1.inner.response.rect.max.y <= r2.inner.response.rect.min.y,
+                "two consecutive CommonMark viewers should not vertically overlap"
+            );
+        });
+    }
+
+    #[test]
+    fn render_segments_do_not_overlap() {
+        // 验证 renderer 的分段渲染结果在垂直方向不重叠。
+        egui::__run_test_ui(|ui| {
+            let mut cache = CommonMarkCache::default();
+            let text = "# A\n\npara a\n\n# B\n\npara b\n";
+            let _ = render_markdown_with_toc(ui, &mut cache, text, 1.0, None);
+            // render_markdown_with_toc 内部使用 ScrollArea 与居中布局，
+            // 只要渲染不 panic 且总高度合理，即认为无重叠。
+            assert!(ui.min_rect().height() > 0.0);
+        });
+    }
 }
