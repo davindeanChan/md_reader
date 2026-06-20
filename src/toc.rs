@@ -20,56 +20,93 @@ pub fn extract_headings(markdown: &str) -> Vec<Heading> {
     let mut out = Vec::new();
     let mut in_fence = false;
     let mut fence_marker: String = String::new();
-    // 当前已消费到的字节偏移（即下一行起始位置）
-    let mut byte_pos: usize = 0;
 
-    for line in markdown.lines() {
-        // 记录本行起始字节偏移后再推进（lines() 不含行尾 \n）
-        let line_start = byte_pos;
-        byte_pos += line.len() + 1;
+    // 使用 char_indices 准确追踪每个字符的字节位置
+    let chars: Vec<(usize, char)> = markdown.char_indices().collect();
+    let mut line_start: usize = 0; // 当前行的字节起始位置
+    let mut line_text = String::new(); // 当前行的文本内容
 
-        let trimmed = line.trim_start();
-
-        // 代码围栏开关：``` 或 ~~~（允许带长度后缀）
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            let marker = &trimmed[..3];
-            if !in_fence {
-                in_fence = true;
-                fence_marker = marker.to_string();
-            } else if marker == fence_marker {
-                in_fence = false;
-                fence_marker.clear();
-            }
-            continue;
-        }
-        if in_fence {
-            continue;
-        }
-
-        // ATX 标题：1~6 个 # 后跟空格或行尾
-        let Some(rest) = trimmed.strip_prefix('#') else {
-            continue;
-        };
-        let mut level: u8 = 1;
-        let mut s = rest;
-        while s.starts_with('#') && level < 6 {
-            s = &s[1..];
-            level += 1;
-        }
-        // # 后必须是空格或行尾，否则不算标题（如 #foo）
-        if !s.is_empty() && !s.starts_with(' ') {
-            continue;
-        }
-        let text = s.trim().trim_end_matches('#').trim().to_string();
-        if !text.is_empty() {
-            out.push(Heading {
-                level,
-                text,
-                byte_start: line_start,
-            });
+    for &(byte_idx, ch) in chars.iter() {
+        if ch == '\n' {
+            // 处理完整的一行
+            process_line(
+                &mut out,
+                &line_text,
+                line_start,
+                &mut in_fence,
+                &mut fence_marker,
+            );
+            // 下一行从下一个字符开始
+            line_start = byte_idx + ch.len_utf8();
+            line_text.clear();
+        } else {
+            line_text.push(ch);
         }
     }
+
+    // 处理最后一行（可能没有换行符）
+    if !line_text.is_empty() {
+        process_line(
+            &mut out,
+            &line_text,
+            line_start,
+            &mut in_fence,
+            &mut fence_marker,
+        );
+    }
+
     out
+}
+
+/// 处理单行，检测是否为标题
+fn process_line(
+    out: &mut Vec<Heading>,
+    line: &str,
+    byte_start: usize,
+    in_fence: &mut bool,
+    fence_marker: &mut String,
+) {
+    let trimmed = line.trim_start();
+
+    // 代码围栏开关：``` 或 ~~~（允许带长度后缀）
+    if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+        let marker = &trimmed[..3];
+        if !*in_fence {
+            *in_fence = true;
+            fence_marker.clear();
+            fence_marker.push_str(marker);
+        } else if marker == fence_marker.as_str() {
+            *in_fence = false;
+            fence_marker.clear();
+        }
+        return;
+    }
+    if *in_fence {
+        return;
+    }
+
+    // ATX 标题：1~6 个 # 后跟空格或行尾
+    let Some(rest) = trimmed.strip_prefix('#') else {
+        return;
+    };
+    let mut level: u8 = 1;
+    let mut s = rest;
+    while s.starts_with('#') && level < 6 {
+        s = &s[1..];
+        level += 1;
+    }
+    // # 后必须是空格或行尾，否则不算标题（如 #foo）
+    if !s.is_empty() && !s.starts_with(' ') {
+        return;
+    }
+    let text = s.trim().trim_end_matches('#').trim().to_string();
+    if !text.is_empty() {
+        out.push(Heading {
+            level,
+            text,
+            byte_start,
+        });
+    }
 }
 
 /// 收集 Markdown 中的链接引用定义（reference link definitions）。
